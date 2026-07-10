@@ -1,0 +1,11 @@
+# Raw V-Dem coder-level data — download from V-Dem Institute, do not commit
+vdem-data/V-Dem-Coder-Level-v15_csv/
+vdem-data/V-Dem-Coder-Level-v15_rds/
+
+# Generated derived data — reproduce by running generate_vdem_data.R
+vdem-data/panel_means.csv
+vdem-data/human_ratings.csv
+
+# Source documents and processed text — downloaded locally, not committed
+source-docs/
+processed-text/
