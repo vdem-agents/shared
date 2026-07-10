@@ -58,14 +58,17 @@ if (!"year" %in% names(cl)) {
 cl <- cl |> mutate(iso3 = country_text_id)
 
 # ── Identify coder-level indicator columns ────────────────────────────────────
-# Include: numeric v2* columns that are not anchor questions or aggregate index scores
-agg_cols       <- grep("^v2x_", names(cl), value = TRUE)
-indicator_cols <- setdiff(
-  grep("^v2", names(cl), value = TRUE),
-  c(ANCHOR_COLS, agg_cols)
-)
+# Restrict to Type C indicators (vartype == "C" in vdemdata::codebook).
+# These are the expert-coded ordinal indicators — the only ones with
+# coder-level variation relevant for panel means and fine-tuning.
+type_c_tags <- vdemdata::codebook |>
+  filter(vartype == "C") |>
+  pull(tag)
+
+# Intersect with columns actually present in the coder-level dataset
+indicator_cols <- intersect(type_c_tags, names(cl))
 indicator_cols <- indicator_cols[vapply(cl[indicator_cols], is.numeric, logical(1))]
-cat(sprintf("  Identified %d coder-level indicator columns\n", length(indicator_cols)))
+cat(sprintf("  Identified %d Type C indicator columns\n", length(indicator_cols)))
 
 # ── theta_quintile from vdemdata ─────────────────────────────────────────────
 # v2x_polyarchy comes from the main V-Dem country-year dataset (vdemdata::vdem),
