@@ -26,6 +26,15 @@ suppressPackageStartupMessages({
 
 STUDY_YEARS <- 2010:2024
 
+# Election-specific indicators are coded on the election date rather than Dec 31.
+# These are excluded by the Dec 31 filter and require a separate pass using the
+# last observation per coder per country-year instead.
+ELECTION_INDICATORS <- c(
+  "v2elaccept", "v2elasmoff", "v2elboycot", "v2elfrcamp", "v2elfrfair",
+  "v2elintim",  "v2elirreg",  "v2elmulpar", "v2elpaidig", "v2elpdcamp",
+  "v2elpeace",  "v2elrgstry", "v2elvotbuy"
+)
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 args        <- commandArgs(trailingOnly = FALSE)
 script_file <- sub("--file=", "", args[grep("--file=", args)])
@@ -40,16 +49,44 @@ OUT_DIR  <- file.path(SHARED_DIR, "vdem-data")
 
 # ── Load and filter ───────────────────────────────────────────────────────────
 cat("Loading coder-level data...\n")
-cl <- read_rds(RDS_PATH) |>
+cl_raw <- read_rds(RDS_PATH) |>
   mutate(
-    year = as.integer(format(as.Date(historical_date), "%Y")),
+    historical_date = as.Date(historical_date),
+    year = as.integer(format(historical_date, "%Y")),
     iso3 = country_text_id
   ) |>
-  filter(
-    format(as.Date(historical_date), "%m-%d") == "12-31",
-    year %in% STUDY_YEARS
-  )
-cat(sprintf("  After Dec 31 + year filter: %s rows (%d–%d)\n",
+  filter(year %in% STUDY_YEARS)
+
+# Dec 31 rows for all annually-coded indicators
+cl_annual <- cl_raw |>
+  filter(format(historical_date, "%m-%d") == "12-31")
+
+# Last observation per coder-country-year for election-specific indicators.
+# These are coded on the election date, not Dec 31, so the Dec 31 filter drops them.
+# Exclude the structural Jan 1 and Dec 31 rows to isolate event-date codings,
+# then keep only rows where at least one election indicator is non-NA.
+# slice_max on historical_date handles countries with multiple elections in one year
+# by keeping the most recent election coding per coder.
+el_cols <- intersect(ELECTION_INDICATORS, names(cl_raw))
+cl_election <- cl_raw |>
+  filter(!format(historical_date, "%m-%d") %in% c("01-01", "12-31")) |>
+  filter(if_any(all_of(el_cols), ~ !is.na(.))) |>
+  group_by(country_text_id, coder_id, year) |>
+  slice_max(historical_date, n = 1, with_ties = FALSE) |>
+  ungroup() |>
+  select(all_of(intersect(
+    c("country_text_id", "iso3", "year", "coder_id", "historical_date", ELECTION_INDICATORS),
+    names(cl_raw)
+  )))
+
+cl <- bind_rows(
+  cl_annual,
+  cl_election |> select(all_of(intersect(names(cl_annual), names(cl_election))))
+)
+
+cat(sprintf("  Annual (Dec 31) rows: %s\n",    format(nrow(cl_annual),   big.mark = ",")))
+cat(sprintf("  Election indicator rows: %s\n", format(nrow(cl_election), big.mark = ",")))
+cat(sprintf("  Combined: %s rows (%d–%d)\n",
             format(nrow(cl), big.mark = ","), min(cl$year), max(cl$year)))
 
 # ── Identify Type C indicator columns ────────────────────────────────────────
