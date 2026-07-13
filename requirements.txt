@@ -1,0 +1,10 @@
+# Shared pipeline dependencies (download_reports.py, ingest.py)
+# Install in whichever conda env you run download/ingest from:
+#   pip install -r requirements.txt
+#
+# Compatible with the panel-member and bridge-coder conda environments.
+
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+PyPDF2>=3.0.0
