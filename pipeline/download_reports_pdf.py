@@ -242,6 +242,83 @@ def extract_pdfs(year: int, country_filter: list[str] | None = None,
 
 
 # ---------------------------------------------------------------------------
+# IRFR PDF extraction
+# ---------------------------------------------------------------------------
+
+def extract_irfr_exec_summary_from_text(text: str) -> str | None:
+    """
+    Extract the Executive Summary from raw IRFR PDF text.
+    Looks for content between 'EXECUTIVE SUMMARY' and 'I. Religious Demography'.
+    """
+    # Normalize whitespace and collapsed-character artifacts from PDF extraction.
+    # Some PDFs produce "E xecutive S ummary" with a space after the first letter.
+    normalized = re.sub(r"\s+", " ", text)
+    # Re-join split words: "E xecutive" → "Executive", "T he" → "The"
+    normalized = re.sub(r"\b([A-Za-z]) (?=[a-zA-Z])", r"\1", normalized)
+    text_upper = normalized.upper()
+    start = text_upper.find("EXECUTIVE SUMMARY")
+    if start == -1:
+        return None
+    text = normalized
+    start += len("EXECUTIVE SUMMARY")
+
+    # Find end at "I. Religious Demography" or "SECTION I" or "I. RELIGIOUS"
+    end = len(text)
+    for marker in ["I. RELIGIOUS DEMOGRAPHY", "SECTION I.", "I. RELIGIOUS"]:
+        pos = text_upper.find(marker, start)
+        if pos != -1 and pos < end:
+            end = pos
+
+    excerpt = text[start:end].strip()
+    # Clean up whitespace artifacts from PDF extraction
+    excerpt = re.sub(r"\n{3,}", "\n\n", excerpt)
+    excerpt = re.sub(r" +", " ", excerpt)
+    return excerpt if len(excerpt) > 100 else None
+
+
+def download_irfr_pdf(pdf_url: str, slug: str, year: int,
+                      overwrite: bool = False) -> bool:
+    """
+    Download an IRFR PDF from a direct URL, extract the executive summary,
+    and save to processed-text/irfr/{year}/{slug}.txt.
+    """
+    out_dir = PROCESSED_DIR / "irfr" / str(year)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dest = out_dir / f"{slug}.txt"
+
+    if dest.exists() and not overwrite:
+        print(f"Skip (exists): {dest.name}")
+        return True
+
+    # Download PDF to a temp file
+    tmp = out_dir / f"_tmp_{slug}.pdf"
+    print(f"Downloading {pdf_url} ...", end=" ", flush=True)
+    try:
+        r = requests.get(pdf_url, headers=HEADERS, timeout=60, stream=True)
+        r.raise_for_status()
+        tmp.write_bytes(r.content)
+    except Exception as e:
+        print(f"FAILED ({e})")
+        return False
+
+    raw = _extract_pdf_text(tmp)
+    tmp.unlink()
+
+    if not raw:
+        print("FAILED (PDF extraction)")
+        return False
+
+    summary = extract_irfr_exec_summary_from_text(raw)
+    if not summary:
+        print("FAILED (no exec summary found)")
+        return False
+
+    dest.write_text(summary, encoding="utf-8")
+    print(f"OK ({len(summary):,} chars)")
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -267,9 +344,17 @@ def main():
         "--extract-only", action="store_true",
         help="Extract text from already-downloaded PDFs (no download)",
     )
+    group.add_argument(
+        "--irfr-pdf", nargs=2, metavar=("SLUG", "PDF_URL"), action="append",
+        help="Extract IRFR exec summary from a direct PDF URL; "
+             "repeat for multiple: --irfr-pdf colombia URL --irfr-pdf romania URL",
+    )
     args = parser.parse_args()
 
-    if args.extract_only:
+    if args.irfr_pdf:
+        for slug, pdf_url in args.irfr_pdf:
+            download_irfr_pdf(pdf_url, slug, args.year, args.overwrite)
+    elif args.extract_only:
         extract_pdfs(args.year, args.countries, args.overwrite)
     elif args.extract:
         download_pdfs(args.year, args.countries, args.overwrite)

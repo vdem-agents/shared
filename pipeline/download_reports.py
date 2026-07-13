@@ -363,7 +363,7 @@ def _fetch_sd_text(slug: str, year: int) -> str | None:
             text = re.sub(r" +", " ", text)
             text = re.sub(r"\n{3,}", "\n\n", text).strip()
             if len(text) >= 500:
-                time.sleep(1.0)
+                time.sleep(1.5)
                 return text
         except Exception:
             continue
@@ -521,19 +521,37 @@ def _fetch_irfr_index(year: int) -> dict[str, str]:
 
 
 def _extract_irfr_exec_summary(html: str) -> str | None:
-    """Extract the Executive Summary section from an IRFR country page."""
+    """
+    Extract the Executive Summary from an IRFR country page.
+    Falls back to the 'Status of Government Respect for Religious Freedom'
+    section for pages that omit the Executive Summary heading.
+    """
     soup = BeautifulSoup(html, "lxml")
+
+    def _text_after(tag) -> str | None:
+        paragraphs = []
+        for sib in tag.find_next_siblings():
+            if sib.name in ("h1", "h2", "h3", "h4"):
+                break
+            text = sib.get_text(separator=" ", strip=True)
+            if text and len(text) >= 15:
+                paragraphs.append(text)
+        return "\n\n".join(paragraphs) if paragraphs else None
+
     for tag in soup.find_all(["h1", "h2", "h3", "h4"]):
         if "executive summary" in tag.get_text().lower():
-            paragraphs = []
-            for sib in tag.find_next_siblings():
-                if sib.name in ("h1", "h2", "h3", "h4"):
-                    break
-                text = sib.get_text(separator=" ", strip=True)
-                if text and len(text) >= 15:
-                    paragraphs.append(text)
-            if paragraphs:
-                return "\n\n".join(paragraphs)
+            result = _text_after(tag)
+            if result:
+                return result
+
+    # Fallback: preamble between the report-title heading and the first section heading.
+    # Some pages label sections as h3 with no explicit "Executive Summary" h3.
+    for tag in soup.find_all(["h1", "h2"]):
+        if "international religious freedom report" in tag.get_text().lower():
+            result = _text_after(tag)
+            if result:
+                return result
+
     return None
 
 
@@ -565,7 +583,7 @@ def download_irfr(year: int, country_filter: list[str] | None = None,
         if status == 404 or not html:
             print("NOT FOUND")
             failed.append(name)
-            time.sleep(0.3)
+            time.sleep(0.5)
             continue
 
         text = _extract_irfr_exec_summary(html)
@@ -576,7 +594,7 @@ def download_irfr(year: int, country_filter: list[str] | None = None,
         else:
             print("NO EXEC SUMMARY")
             failed.append(name)
-        time.sleep(0.5)
+        time.sleep(1.5)
 
     _save_manifest(out_dir, year, success, failed, skipped, "irfr")
     print(f"\nIRFR: {success} saved, {len(failed)} failed, {len(skipped)} skipped")
