@@ -268,8 +268,8 @@ FH_COUNTRIES = {
 # Ordered URL templates for State Dept HTML reports.
 # {year} and {slug} are substituted; first 200 response with entry-content wins.
 _SD_URL_TEMPLATES = [
-    "https://2017-2021.state.gov/reports/{year}-country-reports-on-human-rights-practices/{slug}/",
     "https://www.state.gov/reports/{year}-country-reports-on-human-rights-practices/{slug}/",
+    "https://2017-2021.state.gov/reports/{year}-country-reports-on-human-rights-practices/{slug}/",
     "https://2009-2017.state.gov/reports/{year}-country-reports-on-human-rights-practices/{slug}/",
 ]
 

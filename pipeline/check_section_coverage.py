@@ -45,8 +45,9 @@ def check_year(year: int, source: str) -> None:
     files = sorted(src_dir.glob("*.txt"))
     parse_fn = parse_state_dept if source == "state-dept" else parse_freedom_house
 
-    missing: dict[str, list[str]] = defaultdict(list)  # key → countries missing it
-    no_sections: list[str] = []                          # files with no recognized sections at all
+    missing_exec: list[str] = []                          # files missing exec_summary
+    missing: dict[str, list[str]] = defaultdict(list)     # key → countries missing it
+    no_sections: list[str] = []                           # files with no recognized sections at all
 
     for path in files:
         parsed = parse_fn(path.read_text(encoding="utf-8"))
@@ -54,6 +55,8 @@ def check_year(year: int, source: str) -> None:
         if not content_keys:
             no_sections.append(path.stem)
             continue
+        if "exec_summary" not in parsed:
+            missing_exec.append(path.stem)
         for k in keys_used:
             if k not in parsed:
                 missing[k].append(path.stem)
@@ -65,13 +68,18 @@ def check_year(year: int, source: str) -> None:
         for s in no_sections:
             print(f"    {s}")
 
+    if missing_exec:
+        print(f"\n  exec_summary missing [{len(missing_exec)}]: {sorted(missing_exec)}")
+    else:
+        print(f"\n  exec_summary: present in all {len(files) - len(no_sections)} files.")
+
     if missing:
-        print(f"\n  Sections absent from ≥1 country report (genuine content gaps):")
+        print(f"\n  YAML-mapped sections absent from ≥1 country report:")
         for k in sorted(missing):
             countries = sorted(missing[k])
             print(f"    {k} [{len(countries)}]: {countries}")
     else:
-        print(f"\n  All {len(keys_used)} mapped sections present in all {len(files)} files.")
+        print(f"  All {len(keys_used)} YAML-mapped sections present in all files.")
 
 
 def main() -> None:
